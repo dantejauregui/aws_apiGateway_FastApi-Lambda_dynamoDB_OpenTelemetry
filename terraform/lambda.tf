@@ -39,7 +39,14 @@ data "aws_iam_policy_document" "permission_policy" {
     actions = [
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
-      "logs:PutLogEvents"
+      "logs:PutLogEvents",
+      "dynamodb:DescribeTable",
+      "dynamodb:PutItem",
+      "dynamodb:GetItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:Query",
+      "dynamodb:TransactWriteItems"
     ]
 
     resources = ["*"]

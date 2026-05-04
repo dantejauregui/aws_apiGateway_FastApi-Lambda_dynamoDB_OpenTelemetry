@@ -7,9 +7,13 @@ from datetime import datetime
 import json
 import requests
 import boto3
+from botocore.exceptions import ClientError
 import os
+from decimal import Decimal
 
 app = FastAPI(title="My Serious API")
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('items')
 
 # --- Fake DB (in-memory) ---
 items_db = []
@@ -45,17 +49,41 @@ async def create_item(item: Item):
     new_item["id"] = str(uuid4())
     new_item["created_at"] = datetime.utcnow().isoformat()
 
-    # 👉 REQUIRED for DynamoDB GSI:
-    # new_item["gsi_pk"] = "ITEM"
-    # new_item["gsi_sk"] = new_item["price"]
+    # REQUIRED for DynamoDB GSI:
+    new_item["gsi_pk"] = "ITEM"
+    new_item["price"] = Decimal(str(new_item["price"]))
+    new_item["gsi_sk"] = new_item["price"]
 
     # store item
-    items_db.append(new_item)
+    table.put_item(
+        Item={
+            "id": new_item["id"],
+            "name": new_item["name"],
+            "price": new_item["price"],
+            "tags": new_item["tags"],
+            "created_at": new_item["created_at"],
+            "gsi_pk": new_item["gsi_pk"],
+            "gsi_sk": new_item["gsi_sk"]
+        }
+    )
+    # items_db.append(new_item)
 
     # update stats (DynamoDB-style thinking)
-    stats_db["total_items"] += 1
-    stats_db["total_price_sum"] += new_item["price"]
+    table.update_item(
+        Key={"id": "STATS"},
+        UpdateExpression="""
+            SET total_items = if_not_exists(total_items, :zero) + :inc,
+                total_price_sum = if_not_exists(total_price_sum, :zero) + :price
+        """,
+        ExpressionAttributeValues={
+            ":inc": 1,
+            ":price": new_item["price"],
+            ":zero": 0
+        }
+    )
 
+    # stats_db["total_items"] += 1
+    # stats_db["total_price_sum"] += new_item["price"]
     return new_item
 
 
@@ -107,6 +135,36 @@ async def stats():
         "total_items": total,
         "average_price": avg_price
     }
+
+
+@app.get("/test-connection-dynamodb")
+async def test_dynamodb():
+    try:
+        # Test DynamoDB connection
+        table_info = {
+            'table_name': table.table_name,
+            'creation_time': str(table.creation_date_time),
+            'table_status': table.table_status
+        }
+        
+        return {
+            'status': 'success',
+            'message': 'DynamoDB connection successful',
+            'table_info': table_info
+        }
+        
+    except ClientError as e:
+        return {
+            'status': 'error',
+            'message': 'Failed to connect to DynamoDB',
+            'error': str(e)
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': 'Unexpected error occurred',
+            'error': str(e)
+        }
 
 
 handler = Mangum(app, lifespan="off", api_gateway_base_path="/")
