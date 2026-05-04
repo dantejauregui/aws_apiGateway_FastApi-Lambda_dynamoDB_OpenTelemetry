@@ -1,4 +1,6 @@
-# Python Part for Deploying a zip archive in AWS Lambda:
+# AWS ApiGateway, FastApi python in Lambd, DynamoDB & OpenTelemetry enabled for Observability
+
+## Python Part for Deploying a zip archive in AWS Lambda:
 In the python module we generate the zip file for AWS Lambda that includes the needed pip packages and the latest python code.
 
 For Zip file Lambda version:
@@ -31,3 +33,27 @@ cd ..
 
 
 After the zip file is located inside the `Terraform folder`!
+
+
+
+## Items & Attributes in DynamoDB "item" Table
+
+DynamoDB does NOT enforce schema, but you should define "expected" attributes:
+
+```
+Item attributes (regular items)
+id                (String)  → PK
+name              (String)
+price             (Number)
+tags              (List of String)
+created_at        (String, ISO format)
+
+# GSI attributes
+gsi_pk            (String)
+gsi_sk            (Number)
+Stats item attributes
+id                (String) → "STATS" (PK)
+
+total_items       (Number)
+total_price_sum   (Number)
+```
