@@ -10,6 +10,7 @@ import boto3
 from botocore.exceptions import ClientError
 import os
 from decimal import Decimal
+from boto3.dynamodb.conditions import Key
 
 app = FastAPI(title="My Serious API")
 dynamodb = boto3.resource('dynamodb')
@@ -54,50 +55,74 @@ async def create_item(item: Item):
     new_item["price"] = Decimal(str(new_item["price"]))
     new_item["gsi_sk"] = new_item["price"]
 
-    # store item
-    table.put_item(
-        Item={
-            "id": new_item["id"],
-            "name": new_item["name"],
-            "price": new_item["price"],
-            "tags": new_item["tags"],
-            "created_at": new_item["created_at"],
-            "gsi_pk": new_item["gsi_pk"],
-            "gsi_sk": new_item["gsi_sk"]
-        }
-    )
-    # items_db.append(new_item)
+    # Creating a new item:
+    try:
+        response = table.put_item(
+            Item={
+                "id": new_item["id"],
+                "name": new_item["name"],
+                "price": new_item["price"],
+                "tags": new_item["tags"],
+                "created_at": new_item["created_at"],
+                "gsi_pk": new_item["gsi_pk"],
+                "gsi_sk": new_item["gsi_sk"]
+            }
+        )
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
 
-    # update stats (DynamoDB-style thinking)
-    table.update_item(
-        Key={"id": "STATS"},
-        UpdateExpression="""
-            SET total_items = if_not_exists(total_items, :zero) + :inc,
-                total_price_sum = if_not_exists(total_price_sum, :zero) + :price
-        """,
-        ExpressionAttributeValues={
-            ":inc": 1,
-            ":price": new_item["price"],
-            ":zero": 0
-        }
-    )
+    # updating attributes of the "stats" item in the table  (DynamoDB-style thinking):
+    try:
+        response = table.update_item(
+            Key={"id": "STATS"},
+            UpdateExpression="""
+                SET total_items = if_not_exists(total_items, :zero) + :inc,
+                    total_price_sum = if_not_exists(total_price_sum, :zero) + :price
+            """,
+            ExpressionAttributeValues={
+                ":inc": 1,
+                ":price": new_item["price"],
+                ":zero": 0
+            }
+        )
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
 
-    # stats_db["total_items"] += 1
-    # stats_db["total_price_sum"] += new_item["price"]
+    print(new_item)
+    new_item["price"] = float(new_item["price"])
     return new_item
 
 
 @app.get("/items", response_model=List[ItemResponse])
-async def list_items(
-    min_price: float = Query(0, ge=0),
-    max_price: float = Query(999999, ge=0)
-):
-    # still scan locally, but later this becomes a GSI query
-    return [
-        item for item in items_db
-        if min_price <= item["price"] <= max_price
-    ]
-
+async def list_items(min_price: float = Query(0, ge=0), max_price: float = Query(999999, ge=0)):
+    try:
+        response = table.query(
+            IndexName='price-index',
+            KeyConditionExpression=(
+                Key('gsi_pk').eq('ITEM') &
+                Key('gsi_sk').between(
+                    Decimal(str(min_price)),
+                    Decimal(str(max_price))
+                )
+            )
+        )
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
+    
+    items = response.get("Items", [])
+    for item in items:
+        if "price" in item:
+            item["price"] = float(item["price"])
+        item.pop("gsi_pk", None)
+        item.pop("gsi_sk", None)
+    
+    return items
 
 @app.get("/items/{item_id}", response_model=ItemResponse)
 async def get_item(item_id: str):
@@ -167,4 +192,4 @@ async def test_dynamodb():
         }
 
 
-handler = Mangum(app, lifespan="off", api_gateway_base_path="/")
+handler = Mangum(app, lifespan="off", api_gateway_base_path=None)
