@@ -84,7 +84,7 @@ async def create_item(item: Item):
             ExpressionAttributeValues={
                 ":inc": 1,
                 ":price": new_item["price"],
-                ":zero": 0
+                ":zero": Decimal("0")
             }
         )
     except ClientError as e:
@@ -134,25 +134,66 @@ async def get_item(item_id: str):
 
 @app.delete("/items/{item_id}")
 async def delete_item(item_id: str):
-    for i, item in enumerate(items_db):
-        if item["id"] == item_id:
-            removed = items_db.pop(i)
+    try:
+        # 1. Get item by ID
+        response = table.get_item(Key={"id": item_id})
+        item = response.get("Item")
 
-            # update stats (critical for DynamoDB design)
-            stats_db["total_items"] -= 1
-            stats_db["total_price_sum"] -= removed["price"]
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
 
-            return {"deleted": True}
+        price = item["price"]  # This is already Decimal
 
-    raise HTTPException(status_code=404, detail="Item not found")
+        # 2. Delete item
+        table.delete_item(Key={"id": item_id})
+
+        # 3. Update stats
+        table.update_item(
+            Key={"id": "STATS"},
+            UpdateExpression="""
+                SET total_items = if_not_exists(total_items, :zero) - :inc,
+                    total_price_sum = if_not_exists(total_price_sum, :zero) - :price
+            """,
+            ExpressionAttributeValues={
+                ":inc": 1,
+                ":price": price,
+                ":zero": Decimal("0")
+            }
+        )
+
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
+
+    return {"deleted": True}
 
 
 @app.get("/stats")
 async def stats():
-    total = stats_db["total_items"]
+    try:
+        response = table.get_item(
+            Key={"id": "STATS"}
+        )
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
+
+    item = response.get("Item")
+
+    if not item:
+        # No stats yet → return empty state
+        return {
+            "total_items": 0,
+            "average_price": 0
+        }
+
+    total = item.get("total_items", 0)
+    total_price_sum = item.get("total_price_sum", 0)
 
     avg_price = (
-        stats_db["total_price_sum"] / total
+        float(total_price_sum) / total
         if total > 0 else 0
     )
 
@@ -162,34 +203,35 @@ async def stats():
     }
 
 
-@app.get("/test-connection-dynamodb")
-async def test_dynamodb():
-    try:
-        # Test DynamoDB connection
-        table_info = {
-            'table_name': table.table_name,
-            'creation_time': str(table.creation_date_time),
-            'table_status': table.table_status
-        }
+# FOR INITIAL CONNECTION TESTING:
+# @app.get("/test-connection-dynamodb")
+# async def test_dynamodb():
+#     try:
+#         # Test DynamoDB connection
+#         table_info = {
+#             'table_name': table.table_name,
+#             'creation_time': str(table.creation_date_time),
+#             'table_status': table.table_status
+#         }
         
-        return {
-            'status': 'success',
-            'message': 'DynamoDB connection successful',
-            'table_info': table_info
-        }
+#         return {
+#             'status': 'success',
+#             'message': 'DynamoDB connection successful',
+#             'table_info': table_info
+#         }
         
-    except ClientError as e:
-        return {
-            'status': 'error',
-            'message': 'Failed to connect to DynamoDB',
-            'error': str(e)
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': 'Unexpected error occurred',
-            'error': str(e)
-        }
+#     except ClientError as e:
+#         return {
+#             'status': 'error',
+#             'message': 'Failed to connect to DynamoDB',
+#             'error': str(e)
+#         }
+#     except Exception as e:
+#         return {
+#             'status': 'error',
+#             'message': 'Unexpected error occurred',
+#             'error': str(e)
+#         }
 
 
 handler = Mangum(app, lifespan="off", api_gateway_base_path=None)
