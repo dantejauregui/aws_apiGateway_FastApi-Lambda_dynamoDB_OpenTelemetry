@@ -11,14 +11,15 @@ from botocore.exceptions import ClientError
 import os
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key
-
-# DEBUGING OPEN TELEMETRY:
 import logging
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger("opentelemetry").setLevel(logging.DEBUG)
-logging.getLogger("opentelemetry.exporter").setLevel(logging.DEBUG)
-logging.getLogger("urllib3").setLevel(logging.DEBUG)
 
+# DEBUGING OpenTelemetry:
+# logging.basicConfig(level=logging.DEBUG)
+# logging.getLogger("opentelemetry").setLevel(logging.DEBUG)
+# logging.getLogger("opentelemetry.exporter").setLevel(logging.DEBUG)
+# logging.getLogger("urllib3").setLevel(logging.DEBUG)
+
+# OpenTelemetry Configuration:
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource
@@ -51,7 +52,22 @@ table = dynamodb.Table('items')
 FastAPIInstrumentor.instrument_app(app)
 BotocoreInstrumentor().instrument()
 
-# --- Fake DB (in-memory) ---
+
+# Logging setup for correlated logs with TraceID/SpanID:
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+def get_trace_context():
+    span = trace.get_current_span()
+    span_context = span.get_span_context()
+
+    return {
+        "trace_id": format(span_context.trace_id, "032x"),
+        "span_id": format(span_context.span_id, "016x"),
+    }
+
+
+# --- temporal Fake DB (in-memory) ---
 items_db = []
 
 # --- Stats (simulate DynamoDB STATS item) ---
@@ -109,6 +125,12 @@ async def create_item(item: Item):
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
+        logger.error({
+            "message": "dynamodb_put_item_failed",
+            "error_code": error_code,
+            "error_message": error_message,
+            **get_trace_context()
+        })
         raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
 
     # updating attributes of the "stats" item in the table  (DynamoDB-style thinking):
@@ -128,9 +150,22 @@ async def create_item(item: Item):
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
+        logger.error({
+            "message": "dynamodb_update_stats_failed",
+            "error_code": error_code,
+            "error_message": error_message,
+            **get_trace_context()
+        })
         raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
 
-    print(new_item)
+    logger.info({
+        "message": "item_created",
+        "item_id": new_item["id"],
+        "item_name": new_item["name"],
+        "price": str(new_item["price"]),
+        **get_trace_context()
+    })
+    
     new_item["price"] = float(new_item["price"])
     return new_item
 
@@ -151,6 +186,12 @@ async def list_items(min_price: float = Query(0, ge=0), max_price: float = Query
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
+        logger.error({
+            "message": "dynamodb_query_items_failed",
+            "error_code": error_code,
+            "error_message": error_message,
+            **get_trace_context()
+        })
         raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
     
     items = response.get("Items", [])
@@ -198,10 +239,21 @@ async def delete_item(item_id: str):
                 ":zero": Decimal("0")
             }
         )
+        logger.info({
+            "message": "item_deleted",
+            "item_id": item_id,
+            **get_trace_context()
+        })
 
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
+        logger.error({
+            "message": "dynamodb_delete_item_failed",
+            "error_code": error_code,
+            "error_message": error_message,
+            **get_trace_context()
+        })
         raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
 
     return {"deleted": True}
@@ -216,6 +268,12 @@ async def stats():
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']
+        logger.error({
+            "message": "dynamodb_get_stats_failed",
+            "error_code": error_code,
+            "error_message": error_message,
+            **get_trace_context()
+        })
         raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
 
     item = response.get("Item")
