@@ -4,8 +4,18 @@ resource "aws_lambda_function" "fast_api_lambda" {
   source_code_hash = filebase64sha256("lambda.zip")
   role             = aws_iam_role.fast_api_lambda_role.arn
   # Due to is used in python code "handler = Mangum(app)", the handler is (index.py name and Mangum handler name):
-  handler = "index.handler"
-  runtime = "python3.12"
+  handler     = "index.handler"
+  runtime     = "python3.12"
+  memory_size = 256
+  timeout     = 30
+
+  environment {
+    variables = {
+      OTEL_EXPORTER_OTLP_ENDPOINT = "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp/v1/traces",
+      OTEL_EXPORTER_OTLP_HEADERS  = var.grafanaCloud_otel_token
+      OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+    }
+  }
 
   #   layers = [aws_lambda_layer_version.example.arn]
 

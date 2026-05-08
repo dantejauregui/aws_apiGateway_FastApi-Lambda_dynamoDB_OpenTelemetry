@@ -57,3 +57,24 @@ id                (String) → "STATS" (PK)
 total_items       (Number)
 total_price_sum   (Number)
 ```
+
+
+
+## Grafana Cloud & OpenTelemetry:
+
+First, go to Grafana Cloud to start the openTelemetry setup: 
+```
+https://<YOUR-PROFILE>.grafana.net/a/grafana-setupguide-app/getting-started/otel/
+```
+and select the option: 
+```
+"OpenTelemetry SDK" > "Python" > Serverless (cause I am working with Lambda) > OpenTelemetry Collector > Create a new Token > Get the Base64 converted "clientID:Token structure"
+```
+
+That base64 you will need to add in this Lambda Env Variable 
+```
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <clientID:Token Base64 Structure>"
+```
+
+**Do not use the `%20` that Grafana Cloud suggest as empty space, intead use a normal empty space as shown above.
+

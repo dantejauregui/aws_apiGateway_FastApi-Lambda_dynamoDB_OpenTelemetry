@@ -12,9 +12,44 @@ import os
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key
 
+# DEBUGING OPEN TELEMETRY:
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger("opentelemetry").setLevel(logging.DEBUG)
+logging.getLogger("opentelemetry.exporter").setLevel(logging.DEBUG)
+logging.getLogger("urllib3").setLevel(logging.DEBUG)
+
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+
+resource = Resource.create({
+    "service.name": "fastapi-lambda",
+    "service.version": "1.0.0"
+})
+
+trace.set_tracer_provider(TracerProvider(resource=resource))
+
+span_exporter = OTLPSpanExporter(
+    endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    headers={
+        "Authorization": f"Basic {os.getenv('OTEL_EXPORTER_OTLP_HEADERS')}"
+    }
+)
+trace.get_tracer_provider().add_span_processor(
+    SimpleSpanProcessor(span_exporter)
+)
+
 app = FastAPI(title="My Serious API")
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table('items')
+
+FastAPIInstrumentor.instrument_app(app)
+BotocoreInstrumentor().instrument()
 
 # --- Fake DB (in-memory) ---
 items_db = []
@@ -41,7 +76,10 @@ class ItemResponse(Item):
 
 @app.get("/")
 async def root():
-    return {"status": "ok"}
+    tracer = trace.get_tracer(__name__)
+
+    with tracer.start_as_current_span("manual_test_span"):
+        return {"status": "ok"}
 
 
 @app.post("/items", response_model=ItemResponse)
@@ -168,7 +206,7 @@ async def delete_item(item_id: str):
 
     return {"deleted": True}
 
-
+# There is Bug: Is giving 500 server error
 @app.get("/stats")
 async def stats():
     try:
@@ -201,37 +239,5 @@ async def stats():
         "total_items": total,
         "average_price": avg_price
     }
-
-
-# FOR INITIAL CONNECTION TESTING:
-# @app.get("/test-connection-dynamodb")
-# async def test_dynamodb():
-#     try:
-#         # Test DynamoDB connection
-#         table_info = {
-#             'table_name': table.table_name,
-#             'creation_time': str(table.creation_date_time),
-#             'table_status': table.table_status
-#         }
-        
-#         return {
-#             'status': 'success',
-#             'message': 'DynamoDB connection successful',
-#             'table_info': table_info
-#         }
-        
-#     except ClientError as e:
-#         return {
-#             'status': 'error',
-#             'message': 'Failed to connect to DynamoDB',
-#             'error': str(e)
-#         }
-#     except Exception as e:
-#         return {
-#             'status': 'error',
-#             'message': 'Unexpected error occurred',
-#             'error': str(e)
-#         }
-
 
 handler = Mangum(app, lifespan="off", api_gateway_base_path=None)

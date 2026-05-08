@@ -68,7 +68,7 @@ http://127.0.0.1:8000/docs
 If automatic discovery ever fails, run it explicitly:
 
 ```bash
-uv run fastapi dev main.py
+uv run fastapi dev index.py
 ```
 
 
@@ -107,4 +107,4 @@ cd ..
 ```
 
 
-After the zip file is located inside the `Terraform folder`!
+After that, the zip file is located inside the `Terraform folder`!
