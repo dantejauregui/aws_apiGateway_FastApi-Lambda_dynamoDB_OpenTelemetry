@@ -11,9 +11,10 @@ resource "aws_lambda_function" "fast_api_lambda" {
 
   environment {
     variables = {
-      OTEL_EXPORTER_OTLP_ENDPOINT = "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp/v1/traces",
-      OTEL_EXPORTER_OTLP_HEADERS  = var.grafanaCloud_otel_token
-      OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT  = "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp/v1/traces",
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = "https://otlp-gateway-prod-eu-west-2.grafana.net/otlp/v1/metrics",
+      GRAFANA_CLOUD_OTEL_TOKEN            = var.grafanaCloud_otel_token
+      OTEL_EXPORTER_OTLP_PROTOCOL         = "http/protobuf"
     }
   }
 

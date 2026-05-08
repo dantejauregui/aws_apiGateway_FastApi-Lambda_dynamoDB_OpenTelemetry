@@ -23,27 +23,69 @@ import logging
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.metrics import set_meter_provider, get_meter_provider
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 
 resource = Resource.create({
     "service.name": "fastapi-lambda",
     "service.version": "1.0.0"
 })
 
+# OpenTelemetry Traces Configuration:
 trace.set_tracer_provider(TracerProvider(resource=resource))
 
 span_exporter = OTLPSpanExporter(
-    endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    endpoint=os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"),
     headers={
-        "Authorization": f"Basic {os.getenv('OTEL_EXPORTER_OTLP_HEADERS')}"
+        "Authorization": f"Basic {os.getenv('GRAFANA_CLOUD_OTEL_TOKEN')}"
     }
 )
 trace.get_tracer_provider().add_span_processor(
     SimpleSpanProcessor(span_exporter)
 )
+
+
+# OpenTelemetry Metrics Configuration:
+metric_exporter = OTLPMetricExporter(
+    endpoint=os.getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"),
+    headers={
+        "Authorization": f"Basic {os.getenv('GRAFANA_CLOUD_OTEL_TOKEN')}"
+    }
+)
+
+metric_reader = PeriodicExportingMetricReader(metric_exporter)
+
+meter_provider = MeterProvider(
+    resource=resource,
+    metric_readers=[metric_reader]
+)
+
+set_meter_provider(meter_provider)
+meter = meter_provider.get_meter("fastapi-metrics")
+
+# --- Business Metrics ---
+
+request_counter = meter.create_counter(
+    name="api_requests_total",
+    description="Total API requests"
+)
+
+items_created_counter = meter.create_counter(
+    name="items_created_total",
+    description="Total items created"
+)
+
+items_deleted_counter = meter.create_counter(
+    name="items_deleted_total",
+    description="Total items deleted"
+)
+
 
 app = FastAPI(title="My Serious API")
 dynamodb = boto3.resource('dynamodb')
@@ -92,6 +134,10 @@ class ItemResponse(Item):
 
 @app.get("/")
 async def root():
+    #Business Otel Metrics counter (forcing Serverless to "flush" Metrics instantly):
+    request_counter.add(1)
+    get_meter_provider().force_flush()
+
     tracer = trace.get_tracer(__name__)
 
     with tracer.start_as_current_span("manual_test_span"):
@@ -165,6 +211,11 @@ async def create_item(item: Item):
         "price": str(new_item["price"]),
         **get_trace_context()
     })
+
+    #Business Otel Metrics counter:
+    request_counter.add(1)
+    items_created_counter.add(1)
+    get_meter_provider().force_flush()
     
     new_item["price"] = float(new_item["price"])
     return new_item
@@ -201,6 +252,10 @@ async def list_items(min_price: float = Query(0, ge=0), max_price: float = Query
         item.pop("gsi_pk", None)
         item.pop("gsi_sk", None)
     
+    #Business Otel Metrics counter:
+    request_counter.add(1)
+    get_meter_provider().force_flush()
+
     return items
 
 @app.get("/items/{item_id}", response_model=ItemResponse)
@@ -255,6 +310,11 @@ async def delete_item(item_id: str):
             **get_trace_context()
         })
         raise HTTPException(status_code=500, detail=f"Message: {error_message} - Error: {error_code}")
+
+    #Business Otel Metrics counter:
+    request_counter.add(1)
+    items_deleted_counter.add(1)
+    get_meter_provider().force_flush()
 
     return {"deleted": True}
 

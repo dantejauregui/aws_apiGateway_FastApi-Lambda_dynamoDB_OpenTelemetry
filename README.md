@@ -60,8 +60,8 @@ total_price_sum   (Number)
 
 
 
-## Grafana Cloud & OpenTelemetry:
-
+## Grafana Cloud & OpenTelemetry
+### Setup
 First, go to Grafana Cloud to start the openTelemetry setup: 
 ```
 https://<YOUR-PROFILE>.grafana.net/a/grafana-setupguide-app/getting-started/otel/
@@ -78,3 +78,28 @@ OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <clientID:Token Base64 Structure
 
 **Do not use the `%20` that Grafana Cloud suggest as empty space, intead use a normal empty space as shown above.
 
+
+### Grafana Dashboard
+For Metrics using Grafana Prometheus, use this PromQL queries to see the metrics values.
+
+Items created in the las hour:
+```
+increase(items_created_total[1h])
+```
+
+Items deleted in the las hour:
+```
+increase(items_deleted_total[1h])
+```
+
+all API requests from FastAPI:
+```
+increase(api_requests_total[1h])
+```
+
+Delete/Create ratio:
+```
+increase(items_deleted_total[1h])
+/
+increase(items_created_total[1h])
+```
