@@ -1,0 +1,209 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": {
+                    "type": "grafana",
+                    "uid": "-- Grafana --"
+                },
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "panels": [
+        {
+            "type": "timeseries",
+            "title": "API Requests Total",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-prom"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(api_requests_total[$__rate_interval]))",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "type": "timeseries",
+            "title": "Items Created Total",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-prom"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(items_created_total[$__rate_interval]))",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "type": "timeseries",
+            "title": "Items Deleted Total",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-prom"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(items_deleted_total[$__rate_interval]))",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "type": "timeseries",
+            "title": "HTTP 5xx Errors",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-prom"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(http_server_duration_count{http_status_code=~\"5..\"}[$__rate_interval]))",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "type": "timeseries",
+            "title": "DynamoDB Failures",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "grafanacloud-prom"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(otel_span_errors_total{service_name=\"fastapi-lambda\"}[$__rate_interval]))",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "type": "table",
+            "title": "Recent Traces",
+            "datasource": {
+                "type": "tempo",
+                "uid": "grafanacloud-traces"
+            },
+            "gridPos": {
+                "h": 10,
+                "w": 8,
+                "x": 0,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "query": "{ resource.service.name = \"fastapi-lambda\" }",
+                    "queryType": "traceql",
+                    "tableType": "traces",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "type": "table",
+            "title": "Slow Traces",
+            "datasource": {
+                "type": "tempo",
+                "uid": "grafanacloud-traces"
+            },
+            "gridPos": {
+                "h": 10,
+                "w": 8,
+                "x": 8,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "query": "{ resource.service.name = \"fastapi-lambda\" && duration > 500ms }",
+                    "queryType": "traceql",
+                    "tableType": "traces",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "type": "table",
+            "title": "Trace Search",
+            "datasource": {
+                "type": "tempo",
+                "uid": "grafanacloud-traces"
+            },
+            "gridPos": {
+                "h": 10,
+                "w": 8,
+                "x": 16,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "query": "{ resource.service.name = \"fastapi-lambda\" }",
+                    "queryType": "traceql",
+                    "tableType": "traces",
+                    "refId": "A"
+                }
+            ]
+        }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 39,
+    "style": "dark",
+    "tags": [
+        "fastapi",
+        "lambda",
+        "otel",
+        "dynamodb"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "timezone": "browser",
+    "title": "FastAPI Lambda Observability",
+    "version": 1,
+    "weekStart": ""
+}

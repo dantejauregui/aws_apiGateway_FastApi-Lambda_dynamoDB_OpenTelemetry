@@ -18,11 +18,9 @@ resource "aws_lambda_function" "fast_api_lambda" {
     }
   }
 
-  #   layers = [aws_lambda_layer_version.example.arn]
-
-  #   tracing_config {
-  #     mode = "Active" # Enable X-Ray tracing
-  #   }
+  layers = [
+    var.lambda_insights_arn_x86_64
+  ]
 }
 
 # Identity-based Trust-Policy for Lambda (WHO can use this role)
@@ -51,13 +49,16 @@ data "aws_iam_policy_document" "permission_policy" {
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
       "logs:PutLogEvents",
+
       "dynamodb:DescribeTable",
       "dynamodb:PutItem",
       "dynamodb:GetItem",
       "dynamodb:DeleteItem",
       "dynamodb:UpdateItem",
       "dynamodb:Query",
-      "dynamodb:TransactWriteItems"
+      "dynamodb:TransactWriteItems",
+
+      "cloudwatch:PutMetricData"
     ]
 
     resources = ["*"]

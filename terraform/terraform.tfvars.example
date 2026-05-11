@@ -1,0 +1,3 @@
+# See variables.tf for descriptions
+
+lambda_insights_arn_x86_64 = ""
